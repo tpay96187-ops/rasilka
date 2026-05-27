@@ -70,7 +70,6 @@ async def add_account_phone(message: Message, state: FSMContext):
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
-    # Отправляем запрос кода
     result = await add_telegram_account(
         api_id=data['api_id'],
         api_hash=data['api_hash'],
@@ -81,6 +80,9 @@ async def add_account_phone(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка: {result['error']}")
         await state.clear()
         return
+    # Сохраняем phone_code_hash
+    if result.get("phone_code_hash"):
+        await state.update_data(phone_code_hash=result['phone_code_hash'])
     await state.update_data(auth_step="code")
     await message.answer("📨 Введите код подтверждения, полученный в Telegram:")
     await state.set_state(AddAccountStates.waiting_code)
@@ -94,7 +96,8 @@ async def add_account_code(message: Message, state: FSMContext):
         api_hash=data['api_hash'],
         phone=data['phone'],
         code=code,
-        step="code"
+        step="code",
+        phone_code_hash=data.get('phone_code_hash')  # передаём
     )
     if result.get("error"):
         await message.answer(f"❌ Ошибка: {result['error']}")
