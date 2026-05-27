@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from backend.bot.states import CampaignStates
 from backend.bot.keyboards import campaigns_list_kb, campaign_actions_kb, select_items_kb, confirm_kb, back_to_main_kb
