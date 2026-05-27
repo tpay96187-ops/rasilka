@@ -240,5 +240,5 @@ async def admin_actions_log(callback: CallbackQuery):
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_actions_log")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_admin_manage")]
     ])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    await callback.message.edit_text(text, reply_markup=kb) 
     await callback.answer()
