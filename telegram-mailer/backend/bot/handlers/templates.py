@@ -27,7 +27,7 @@ async def show_template(callback: CallbackQuery):
         return
     status = "✅ Активен" if tpl.is_active else "❌ Не активен"
     text = f"📝 *{tpl.name}*\n{status}\n\n📄 Содержание:\n{tpl.content[:500]}"
-    await callback.message.edit_text(text, reply_markup=template_actions_kb(template_id, tpl.is_active), parse_mode="Markdown")
+    await callback.message.edit_text(text, reply_markup=template_actions_kb(template_id, tpl.is_active), parse_mode="HTML")
 
 # Создание шаблона
 @router.message(Command("new_template"))
