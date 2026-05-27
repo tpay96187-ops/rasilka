@@ -386,3 +386,34 @@ async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
                 round(success_pct, 2), round(error_pct, 2)
             ])
         return output
+
+# ----- Очистка логов и сброс лимитов (для Celery beat) -----
+async def clear_old_logs(days: int = 30):
+    """Удаляет логи старше указанного количества дней"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import delete
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    async with AsyncSessionLocal() as session:
+        # Удаляем старые логи отправки
+        await session.execute(
+            delete(MailingLog).where(MailingLog.sent_at < cutoff)
+        )
+        # Удаляем старые логи floodwait
+        await session.execute(
+            delete(FloodWaitLog).where(FloodWaitLog.occurred_at < cutoff)
+        )
+        # Удаляем старые логи действий админов
+        await session.execute(
+            delete(AdminActionLog).where(AdminActionLog.timestamp < cutoff)
+        )
+        await session.commit()
+
+async def reset_daily_limits():
+    """Сбрасывает daily_sent для всех аккаунтов"""
+    from datetime import datetime
+    from sqlalchemy import update
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            update(Account).values(daily_sent=0, last_reset_date=datetime.utcnow())
+        )
+        await session.commit()
