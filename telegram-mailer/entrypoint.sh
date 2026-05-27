@@ -1,20 +1,7 @@
 #!/bin/bash
 set -e
 
-# Ожидание PostgreSQL
-echo "Waiting for PostgreSQL..."
-while ! nc -z db 5432; do
-    sleep 0.5
-done
-echo "PostgreSQL started"
-
-# Ожидание Redis
-while ! nc -z redis 6379; do
-    sleep 0.5
-done
-echo "Redis started"
-
-# Инициализация БД (создание таблиц и суперадмина)
+# Инициализация базы данных (создание таблиц, суперадмина)
 python -c "from backend.database import init_db; import asyncio; asyncio.run(init_db())"
 
 case "$1" in
