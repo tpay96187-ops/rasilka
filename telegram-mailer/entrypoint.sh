@@ -24,7 +24,7 @@ case "$1" in
         ;;
     worker)
         echo "Starting Celery Worker..."
-        exec celery -A backend.tasks.celery_app worker --loglevel=info --concurrency=4
+        exec celery -A backend.tasks.celery_app worker --loglevel=info --concurrency=2
         ;;
     beat)
         echo "Starting Celery Beat..."
