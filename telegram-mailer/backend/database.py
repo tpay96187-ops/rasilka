@@ -6,10 +6,16 @@ from backend.config import settings
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import asyncio
+import os
 
 database_url = settings.database_url
 if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+print("=== DIAGNOSTIC ===")
+print("DATABASE_URL from env:", os.getenv("DATABASE_URL"))
+database_url = settings.database_url
+print("After settings.database_url:", database_url.split('@')[0] + '@...')  # скрываем пароль
 
 engine = create_async_engine(database_url, echo=False, pool_size=10, max_overflow=20)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
