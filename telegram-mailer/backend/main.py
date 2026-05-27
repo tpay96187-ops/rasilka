@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from backend.bot.dispatcher import dp, bot
+from backend.bot.dispatcher import dp
+from backend.bot.bot_instance import bot
 from backend.database import init_db
 from backend.config import settings
 
