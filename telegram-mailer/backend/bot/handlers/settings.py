@@ -43,7 +43,7 @@ async def settings_menu(callback: CallbackQuery):
         [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
     ])
     
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 @router.callback_query(F.data == "set_max_accounts")
