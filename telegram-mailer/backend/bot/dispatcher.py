@@ -1,12 +1,12 @@
-from aiogram import Bot, Dispatcher
+from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from backend.config import settings
+from backend.bot.bot_instance import bot
 from backend.bot.middleware import AccessMiddleware
 from backend.bot.handlers import (
-    start, accounts, templates, groups, campaigns, reports, settings as settings_handler, admin_management
+    start, accounts, templates, groups, campaigns, reports, 
+    settings as settings_handler, admin_management
 )
 
-bot = Bot(token=settings.bot_token)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
