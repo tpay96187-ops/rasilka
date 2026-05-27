@@ -23,3 +23,16 @@ async def fetch_all_groups_for_account(account_id: int):
             groups.append(group_data)
     await client.disconnect()
     return groups
+
+async def get_group_entity_by_id(account_id: int, group_id: int):
+    """Получить entity группы по её ID через указанный аккаунт"""
+    from backend.mtproto.client_manager import get_client
+    client = await get_client(account_id)
+    try:
+        entity = await client.get_entity(group_id)
+        return entity
+    except Exception as e:
+        print(f"Error getting group entity: {e}")
+        return None
+    finally:
+        await client.disconnect()
