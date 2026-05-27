@@ -35,7 +35,7 @@ async def show_account(callback: CallbackQuery):
     flood = f"⚠️ FloodWait до {acc.flood_wait_until}" if acc.flood_wait_until and acc.flood_wait_until > datetime.utcnow() else "✅ Нет FloodWait"
     spam = "🚫 SpamBlock" if acc.spam_blocked else "✅ Нет блокировки"
     text = f"📱 *{acc.name}*\n📞 `{acc.phone}`\n{status}\n{flood}\n{spam}\n🕒 Последняя активность: {acc.last_activity}"
-    await callback.message.edit_text(text, reply_markup=account_actions_kb(account_id), parse_mode="Markdown")
+    await callback.message.edit_text(text, reply_markup=account_actions_kb(account_id), parse_mode="HTML")
     await callback.answer()
 
 # Добавление аккаунта через команду /add_account
