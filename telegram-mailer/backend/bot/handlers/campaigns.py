@@ -96,7 +96,7 @@ async def accounts_done(callback: CallbackQuery, state: FSMContext):
         return
     await state.update_data(selected_groups=[])
     await callback.message.edit_text("Выберите группы для рассылки:", 
-                                     reply_markup=select_items_kb(all_groups, "group", "campaign", 0))
+                                     reply_markup=select_items_kb(groups, "group", "campaign", 0, per_page=5, show_select_all=True))
     await state.set_state(CampaignStates.waiting_groups)
 
 # ========== ВЫБОР ГРУПП ==========
@@ -109,6 +109,23 @@ async def select_group(callback: CallbackQuery, state: FSMContext):
         selected.append(group_id)
     await state.update_data(selected_groups=selected)
     await callback.answer("Группа добавлена", show_alert=False)
+
+@router.callback_query(F.data == "group_select_all_campaign")
+async def select_all_groups(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    accounts_ids = data.get("campaign_accounts", [])
+    all_groups = []
+    for acc_id in accounts_ids:
+        groups = await get_groups(acc_id)
+        all_groups.extend(groups)
+    # Исключаем каналы (если вдруг попали)
+    all_groups = [g for g in all_groups if g.group_type != "channel"]
+    selected_ids = [g.id for g in all_groups]
+    await state.update_data(selected_groups=selected_ids)
+    await callback.answer(f"✅ Выбрано {len(selected_ids)} групп")
+    # Переходим к следующему шагу (ввод интервала)
+    await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
+    await state.set_state(CampaignStates.waiting_message_interval)
 
 @router.callback_query(F.data.startswith("group_done_campaign"))
 async def groups_done(callback: CallbackQuery, state: FSMContext):
