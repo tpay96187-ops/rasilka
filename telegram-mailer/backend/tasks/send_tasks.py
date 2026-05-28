@@ -40,7 +40,7 @@ async def run_campaign(campaign_id: int):
                 if not group_entity:
                     logger.error(f"Не удалось получить entity группы {group.group_id} для аккаунта {account.id}")
                     continue
-                result = await send_message_to_group(account.id, group_entity, template.content, campaign_id)
+                result = await send_message_to_group(account.id, group_entity, template.content, campaign_id, group.id)
                 if result.get("success"):
                     logger.info(f"Успешно отправлено в группу {group.title} ({group.group_id})")
                 else:
