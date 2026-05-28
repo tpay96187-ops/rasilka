@@ -2,8 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, selectinload
 from sqlalchemy import select, update, delete, func, and_, or_
 from backend.models import Base, User, Account, Template, Group, Campaign, CampaignAccount, CampaignGroup, MailingLog, FloodWaitLog, AdminActionLog
-from backend.config import settings
-from datetime import datetime, timedelta
+from backend.config import async def get_campaign_stats_by_group
 from typing import List, Optional, Dict, Any
 import asyncio
 
@@ -349,15 +348,15 @@ async def log_mailing(campaign_id: int, account_id: int, group_id: int, success:
 # --- Статистика для отчётов ---
 async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
     async with AsyncSessionLocal() as session:
-        # Простой запрос без cast, обрабатываем в Python
+        # Используем простой count без фильтров, вычисляем в Python
         result = await session.execute(
             select(
                 Group.title,
                 Group.group_id,
                 Group.invite_link,
                 func.count(MailingLog.id).label("attempts"),
-                func.count().filter(MailingLog.success == True).label("success"),
-                func.count().filter(MailingLog.success == False).label("failed")
+                func.sum(case((MailingLog.success == True, 1), else_=0)).label("success"),
+                func.sum(case((MailingLog.success == False, 1), else_=0)).label("failed")
             )
             .join(MailingLog, MailingLog.group_id == Group.id)
             .where(MailingLog.campaign_id == campaign_id)
@@ -366,16 +365,21 @@ async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
         rows = result.all()
         output = []
         for row in rows:
-            total = row.attempts
-            success = row.success or 0
-            failed = row.failed or 0
-            success_pct = (success / total * 100) if total > 0 else 0
-            error_pct = (failed / total * 100) if total > 0 else 0
+            attempts = int(row.attempts) if row.attempts is not None else 0
+            success = int(row.success) if row.success is not None else 0
+            failed = int(row.failed) if row.failed is not None else 0
+            success_pct = (success / attempts * 100) if attempts > 0 else 0
+            error_pct = (failed / attempts * 100) if attempts > 0 else 0
             output.append([
-                row.title, row.group_id, row.invite_link,
-                total, success, failed,
-                round(success_pct, 2), round(error_pct, 2),
-                0  # можно добавить количество аккаунтов, но для ТЗ достаточно
+                str(row.title) if row.title else "",
+                int(row.group_id) if row.group_id else 0,
+                str(row.invite_link) if row.invite_link else "",
+                attempts,
+                success,
+                failed,
+                round(success_pct, 2),
+                round(error_pct, 2),
+                0
             ])
         return output
 
@@ -387,8 +391,8 @@ async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
                 Account.phone,
                 func.count(func.distinct(MailingLog.group_id)).label("groups_count"),
                 func.count(MailingLog.id).label("attempts"),
-                func.count().filter(MailingLog.success == True).label("success"),
-                func.count().filter(MailingLog.success == False).label("failed")
+                func.sum(case((MailingLog.success == True, 1), else_=0)).label("success"),
+                func.sum(case((MailingLog.success == False, 1), else_=0)).label("failed")
             )
             .join(MailingLog, MailingLog.account_id == Account.id)
             .where(MailingLog.campaign_id == campaign_id)
@@ -397,48 +401,23 @@ async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
         rows = result.all()
         output = []
         for row in rows:
-            total = row.attempts
-            success = row.success or 0
-            failed = row.failed or 0
-            success_pct = (success / total * 100) if total > 0 else 0
-            error_pct = (failed / total * 100) if total > 0 else 0
+            attempts = int(row.attempts) if row.attempts is not None else 0
+            success = int(row.success) if row.success is not None else 0
+            failed = int(row.failed) if row.failed is not None else 0
+            groups_count = int(row.groups_count) if row.groups_count is not None else 0
+            success_pct = (success / attempts * 100) if attempts > 0 else 0
+            error_pct = (failed / attempts * 100) if attempts > 0 else 0
             output.append([
-                row.name, row.phone, row.groups_count,
-                total, success, failed,
-                round(success_pct, 2), round(error_pct, 2)
+                str(row.name) if row.name else "",
+                str(row.phone) if row.phone else "",
+                groups_count,
+                attempts,
+                success,
+                failed,
+                round(success_pct, 2),
+                round(error_pct, 2)
             ])
         return output
-
-async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(
-                Account.name,
-                Account.phone,
-                func.count(Account.id).label("groups_count"),
-                func.count(MailingLog.id).label("attempts"),
-                func.sum(MailingLog.success.cast(int)).label("success"),
-                func.sum((~MailingLog.success).cast(int)).label("failed")
-            )
-            .join(MailingLog, MailingLog.account_id == Account.id)
-            .where(MailingLog.campaign_id == campaign_id)
-            .group_by(Account.id)
-        )
-        rows = result.all()
-        output = []
-        for row in rows:
-            total = row.attempts
-            success = row.success or 0
-            failed = row.failed or 0
-            success_pct = (success / total * 100) if total > 0 else 0
-            error_pct = (failed / total * 100) if total > 0 else 0
-            output.append([
-                row.name, row.phone, row.groups_count,
-                total, success, failed,
-                round(success_pct, 2), round(error_pct, 2)
-            ])
-        return output
-
 # --- Очистка логов и сброс лимитов ---
 async def clear_old_logs(days: int = 30):
     cutoff = datetime.utcnow() - timedelta(days=days)
