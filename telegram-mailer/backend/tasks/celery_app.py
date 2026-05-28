@@ -3,8 +3,8 @@ from backend.config import settings
 
 celery_app = Celery(
     "telegram_mailer",
-    broker="redis://default:lIiMFUVuqDASlrDqHPSgtxyRwjaBGVOY@redis.railway.internal:6379",
-    backend="redis://default:lIiMFUVuqDASlrDqHPSgtxyRwjaBGVOY@redis.railway.internal:6379",
+    broker="redis://default:lKRZvIdLonCyxYUgNTyeUfOIQDtPLJUo@redis.railway.internal:6379",
+    backend="redis://default:lKRZvIdLonCyxYUgNTyeUfOIQDtPLJUo@redis.railway.internal:6379",
     include=["backend.tasks.send_tasks", "backend.tasks.cleanup_tasks"]
 )
 
