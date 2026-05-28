@@ -244,10 +244,9 @@ async def campaign_start(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
     await update_campaign(campaign_id, status="running", started_at=datetime.utcnow())
     
-    # Вместо Celery запускаем задачу напрямую
-    import asyncio
-    from backend.tasks.send_tasks import process_campaign
-    asyncio.create_task(process_campaign(campaign_id))
+    # Запускаем фоновую задачу без Celery
+    from backend.tasks.send_tasks import run_campaign
+    asyncio.create_task(run_campaign(campaign_id))
     
     await log_admin_action(callback.from_user.id, "start_campaign", "campaign", campaign_id)
     await callback.answer("✅ Рассылка запущена в фоновом режиме")
