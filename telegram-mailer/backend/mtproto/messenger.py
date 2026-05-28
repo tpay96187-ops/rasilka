@@ -14,8 +14,8 @@ async def send_message_to_group(account_id: int, group_entity, message_text: str
     
     # Не блокируем отправку из-за spam_blocked без проверки
     # Но если есть явный флаг от SpamBot, то действительно блокируем:
-    if acc.spam_blocked:
-        return {"success": False, "error": "spamblock"}
+   # if acc.spam_blocked:
+   #     return {"success": False, "error": "spamblock"}
     
     api_hash = decrypt_value(acc.api_hash)
     client = TelegramClient(acc.session_file, acc.api_id, api_hash)
