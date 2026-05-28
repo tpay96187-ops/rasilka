@@ -2,12 +2,16 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-from backend.bot.states import TemplateStates
-from backend.bot.keyboards import templates_list_kb, template_actions_kb, back_to_main_kb, confirm_kb
+from aiogram.fsm.state import State, StatesGroup
 from backend.database import get_templates, get_template, create_template, update_template, delete_template, log_admin_action
+from backend.bot.keyboards import templates_list_kb, template_actions_kb, back_to_main_kb, confirm_kb
 from backend.services.notification import notify_admin
 
 router = Router()
+
+class TemplateStates(StatesGroup):
+    waiting_name = State()
+    waiting_content = State()
 
 @router.callback_query(F.data == "menu_templates")
 async def list_templates(callback: CallbackQuery):
@@ -27,9 +31,9 @@ async def show_template(callback: CallbackQuery):
         return
     status = "✅ Активен" if tpl.is_active else "❌ Не активен"
     text = f"📝 *{tpl.name}*\n{status}\n\n📄 Содержание:\n{tpl.content[:500]}"
-    await callback.message.edit_text(text, reply_markup=template_actions_kb(template_id, tpl.is_active), parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=template_actions_kb(template_id, tpl.is_active), parse_mode="Markdown")
+    await callback.answer()
 
-# Создание шаблона
 @router.message(Command("new_template"))
 async def new_template_cmd(message: Message, state: FSMContext):
     await message.answer("Введите название шаблона:")
@@ -50,7 +54,6 @@ async def template_content(message: Message, state: FSMContext):
     await state.clear()
     await list_templates(message)
 
-# Редактирование
 @router.callback_query(F.data.startswith("edit_template_"))
 async def edit_template_start(callback: CallbackQuery, state: FSMContext):
     template_id = int(callback.data.split("_")[2])
@@ -71,13 +74,12 @@ async def edit_template_content(message: Message, state: FSMContext):
     data = await state.get_data()
     if message.text != "-":
         await update_template(data['edit_id'], content=message.text)
-    await update_template(data['edit_id'], is_active=True)  # активируем после редактирования
+    await update_template(data['edit_id'], is_active=True)
     await log_admin_action(message.from_user.id, "edit_template", "template", data['edit_id'])
     await message.answer("✅ Шаблон обновлён")
     await state.clear()
     await list_templates(message)
 
-# Вкл/выкл
 @router.callback_query(F.data.startswith("toggle_template_"))
 async def toggle_template(callback: CallbackQuery):
     template_id = int(callback.data.split("_")[2])
@@ -89,7 +91,6 @@ async def toggle_template(callback: CallbackQuery):
         await callback.answer("Статус изменён")
         await show_template(callback)
 
-# Удаление
 @router.callback_query(F.data.startswith("del_template_"))
 async def confirm_delete_template(callback: CallbackQuery):
     template_id = int(callback.data.split("_")[2])
