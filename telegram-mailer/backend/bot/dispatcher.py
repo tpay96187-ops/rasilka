@@ -1,10 +1,10 @@
-from aiogram import Dispatcher
+from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from backend.bot.bot_instance import bot
 from backend.bot.middleware import AccessMiddleware
 from backend.bot.handlers import (
     start, accounts, templates, groups, campaigns, reports, 
-    settings as settings_handler, admin_management
+    settings as settings_handler, admin_management, help as help_handler
 )
 
 storage = MemoryStorage()
@@ -23,5 +23,6 @@ def register_handlers():
     dp.include_router(reports.router)
     dp.include_router(settings_handler.router)
     dp.include_router(admin_management.router)
+    dp.include_router(help_handler.router)
 
 register_handlers()
