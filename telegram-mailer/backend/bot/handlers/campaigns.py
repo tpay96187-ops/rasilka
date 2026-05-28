@@ -182,7 +182,11 @@ async def campaign_limit(message: Message, state: FSMContext):
 # === Просмотр и управление рассылкой ===
 @router.callback_query(F.data.startswith("campaign_"))
 async def show_campaign(callback: CallbackQuery):
-    campaign_id = int(callback.data.split("_")[1])
+    parts = callback.data.split("_")
+    if len(parts) < 2 or not parts[1].isdigit():
+        await callback.answer("Неверный формат")
+        return
+    campaign_id = int(parts[1])
     camp = await get_campaign(campaign_id)
     if not camp:
         await callback.answer("Рассылка не найдена")
@@ -224,12 +228,16 @@ async def campaign_info(callback: CallbackQuery):
 async def campaign_start(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
     await update_campaign(campaign_id, status="running", started_at=datetime.utcnow())
-    # Запускаем фоновую задачу
     asyncio.create_task(run_campaign(campaign_id))
     await log_admin_action(callback.from_user.id, "start_campaign", "campaign", campaign_id)
     await callback.answer("✅ Рассылка запущена")
-    await show_campaign(callback)
-
+    # Просто обновляем текст сообщения, не вызывая show_campaign
+    await callback.message.edit_text(
+        f"📢 Рассылка #{campaign_id} запущена. Отправка сообщений в фоновом режиме.\nСтатус можно проверить в списке рассылок.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 К списку", callback_data="menu_campaigns")]
+        ])
+    )
 @router.callback_query(F.data.startswith("camp_delete_"))
 async def confirm_delete_campaign(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
