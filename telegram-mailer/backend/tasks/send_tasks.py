@@ -1,17 +1,10 @@
-from celery import shared_task
 from backend.database import get_campaign, get_campaign_accounts, get_campaign_groups, get_template, update_campaign
 from backend.mtproto.messenger import send_message_to_group
 from backend.mtproto.group_fetcher import get_group_entity_by_id
 import asyncio
 
-@shared_task(bind=True, max_retries=3)
-def process_campaign(self, campaign_id: int):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(_run_campaign(campaign_id))
-    return result
-
-async def _run_campaign(campaign_id):
+async def run_campaign(campaign_id: int):
+    """Асинхронная фоновая задача для выполнения рассылки"""
     campaign = await get_campaign(campaign_id)
     if not campaign or campaign.status != "running":
         return {"status": "stopped"}
@@ -35,8 +28,3 @@ async def _run_campaign(campaign_id):
         await asyncio.sleep(campaign.cycle_interval)
     await update_campaign(campaign_id, status="completed")
     return {"status": "completed"}
-
-# Добавьте эту функцию:
-def start_campaign_task(campaign_id: int):
-    """Запускает задачу рассылки через Celery"""
-    process_campaign.delay(campaign_id)
