@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from backend.database import get_accounts, get_account, delete_account, set_spam_block, log_admin_action
+from backend.database import get_accounts, get_account, delete_account, set_spam_block, log_admin_action, get_account_by_phone
 from backend.mtproto.auth import add_telegram_account
 from backend.mtproto.spam_checker import check_account_spam_bot
 from backend.services.notification import notify_admin
@@ -67,14 +67,20 @@ async def add_account_api_hash(message: Message, state: FSMContext):
         await message.answer("❌ API HASH слишком короткий. Попробуйте ещё раз:")
         return
     await state.update_data(api_hash=message.text)
-    await message.answer("📞 Введите номер телефона в международном формате (например, +380986722799):")
+    await message.answer("📞 Введите номер телефона в международном формате (например, +79123456789):")
     await state.set_state(AddAccountStates.waiting_phone)
 
 @router.message(AddAccountStates.waiting_phone)
 async def add_account_phone(message: Message, state: FSMContext):
     phone = message.text.strip()
     if not validate_phone(phone):
-        await message.answer("❌ Неверный формат номера. Пример: +380986722799")
+        await message.answer("❌ Неверный формат номера. Пример: +79123456789")
+        return
+    # Проверка на существующий аккаунт
+    existing = await get_account_by_phone(phone)
+    if existing:
+        await message.answer("❌ Аккаунт с таким номером уже добавлен. Удалите его перед повторным добавлением.")
+        await state.clear()
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
