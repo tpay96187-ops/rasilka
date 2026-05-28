@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKe
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from backend.bot.states import CampaignStates
-from backend.bot.keyboards import campaigns_list_kb, campaign_actions_kb, select_items_kb, confirm_kb, back_to_main_kb
+from backend.bot.keyboards import campaigns_list_kb, select_items_kb, confirm_kb, back_to_main_kb
 from backend.database import (
     get_campaigns, get_campaign, create_campaign, update_campaign, delete_campaign,
     get_templates, get_accounts, get_groups, add_account_to_campaign, add_group_to_campaign,
@@ -24,7 +24,7 @@ async def list_campaigns(callback: CallbackQuery):
         await callback.message.edit_text("✉️ Список рассылок:", reply_markup=campaigns_list_kb(campaigns))
     await callback.answer()
 
-# === Кнопка "Создать рассылку" (inline) ===
+# === Обработчик инлайн-кнопки "Создать рассылку" ===
 @router.callback_query(F.data == "new_campaign")
 async def new_campaign_callback(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите название рассылки:")
@@ -37,7 +37,7 @@ async def new_campaign_cmd(message: Message, state: FSMContext):
     await message.answer("Введите название рассылки:")
     await state.set_state(CampaignStates.waiting_name)
 
-# === Шаг 1: название ===
+# === Шаг: название ===
 @router.message(CampaignStates.waiting_name)
 async def campaign_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
@@ -51,7 +51,7 @@ async def campaign_name(message: Message, state: FSMContext):
     await message.answer("Выберите шаблон:", reply_markup=kb)
     await state.set_state(CampaignStates.waiting_template)
 
-# === Шаг 2: шаблон ===
+# === Шаг: выбор шаблона ===
 @router.callback_query(F.data.startswith("camp_tpl_"), CampaignStates.waiting_template)
 async def campaign_template(callback: CallbackQuery, state: FSMContext):
     template_id = int(callback.data.split("_")[2])
@@ -66,8 +66,8 @@ async def campaign_template(callback: CallbackQuery, state: FSMContext):
                                      reply_markup=select_items_kb(valid_accounts, "account", "campaign", 0))
     await state.set_state(CampaignStates.waiting_accounts)
 
-# === Шаг 3: выбор аккаунтов ===
-@router.callback_query(F.data.startswith("account_select_campaign_"), CampaignStates.waiting_accounts)
+# === Выбор аккаунтов (по одному) ===
+@router.callback_query(F.data.startswith("account_select_campaign_"))
 async def select_account(callback: CallbackQuery, state: FSMContext):
     account_id = int(callback.data.split("_")[3])
     data = await state.get_data()
@@ -77,6 +77,7 @@ async def select_account(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_accounts=selected)
     await callback.answer("Аккаунт добавлен", show_alert=False)
 
+# === Завершение выбора аккаунтов ===
 @router.callback_query(F.data.startswith("account_done_campaign"), CampaignStates.waiting_accounts)
 async def accounts_done(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -85,7 +86,8 @@ async def accounts_done(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Выберите хотя бы один аккаунт", show_alert=True)
         return
     await state.update_data(campaign_accounts=selected)
-    # Собираем все группы из выбранных аккаунтов
+    
+    # Собираем группы из выбранных аккаунтов
     all_groups = []
     for acc_id in selected:
         acc_groups = await get_groups(acc_id)
@@ -95,6 +97,7 @@ async def accounts_done(callback: CallbackQuery, state: FSMContext):
     if not groups:
         await callback.message.edit_text("Нет групп для выбранных аккаунтов. Загрузите группы через меню 'Группы'.")
         return
+    
     await state.update_data(selected_groups=[])
     await callback.message.edit_text(
         "Выберите группы для рассылки:",
@@ -102,8 +105,8 @@ async def accounts_done(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(CampaignStates.waiting_groups)
 
-# === Шаг 4: выбор групп ===
-@router.callback_query(F.data.startswith("group_select_campaign_"), CampaignStates.waiting_groups)
+# === Выбор групп (по одной) ===
+@router.callback_query(F.data.startswith("group_select_campaign_"))
 async def select_group(callback: CallbackQuery, state: FSMContext):
     group_id = int(callback.data.split("_")[3])
     data = await state.get_data()
@@ -111,25 +114,26 @@ async def select_group(callback: CallbackQuery, state: FSMContext):
     if group_id not in selected:
         selected.append(group_id)
     await state.update_data(selected_groups=selected)
-    await callback.answer("Группа добавлена", show_alert=False)
+    await callback.answer("Группа добавлена")
 
-@router.callback_query(F.data == "group_select_all_campaign", CampaignStates.waiting_groups)
+# === Кнопка "Выбрать ВСЕ" ===
+@router.callback_query(F.data == "group_select_all_campaign")
 async def select_all_groups(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    # Получаем все группы из аккаунтов (нужно снова собрать, так как в data нет списка всех групп)
-    selected_accounts = data.get("campaign_accounts", [])
+    accounts_ids = data.get("campaign_accounts", [])
     all_groups = []
-    for acc_id in selected_accounts:
-        acc_groups = await get_groups(acc_id)
-        all_groups.extend(acc_groups)
-    groups = [g for g in all_groups if g.group_type != "channel"]
-    selected_ids = [g.id for g in groups]
+    for acc_id in accounts_ids:
+        groups = await get_groups(acc_id)
+        all_groups.extend(groups)
+    all_groups = [g for g in all_groups if g.group_type != "channel"]
+    selected_ids = [g.id for g in all_groups]
     await state.update_data(selected_groups=selected_ids)
     await callback.answer(f"✅ Выбрано {len(selected_ids)} групп")
-    # Переходим к следующему шагу
+    # Переходим к вводу интервала
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
 
+# === Завершение выбора групп ===
 @router.callback_query(F.data.startswith("group_done_campaign"), CampaignStates.waiting_groups)
 async def groups_done(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -137,12 +141,12 @@ async def groups_done(callback: CallbackQuery, state: FSMContext):
     if not selected:
         await callback.answer("Выберите хотя бы одну группу", show_alert=True)
         return
-    # Сохраняем выбранные группы в ключ campaign_groups
+    # Сохраняем выбранные группы под ключом campaign_groups
     await state.update_data(campaign_groups=selected)
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
 
-# === Шаг 5: интервал между сообщениями ===
+# === Интервал между сообщениями ===
 @router.message(CampaignStates.waiting_message_interval)
 async def campaign_interval(message: Message, state: FSMContext):
     interval = int(message.text) if message.text.isdigit() else 30
@@ -150,7 +154,7 @@ async def campaign_interval(message: Message, state: FSMContext):
     await message.answer("Введите интервал между циклами (в секундах, по умолчанию 300):")
     await state.set_state(CampaignStates.waiting_cycle_interval)
 
-# === Шаг 6: интервал между циклами ===
+# === Интервал между циклами ===
 @router.message(CampaignStates.waiting_cycle_interval)
 async def campaign_cycle(message: Message, state: FSMContext):
     cycle = int(message.text) if message.text.isdigit() else 300
@@ -158,15 +162,18 @@ async def campaign_cycle(message: Message, state: FSMContext):
     await message.answer("Введите дневной лимит сообщений (0 = без лимита):")
     await state.set_state(CampaignStates.waiting_daily_limit)
 
-# === Шаг 7: лимит и создание рассылки ===
+# === Финальное создание рассылки ===
 @router.message(CampaignStates.waiting_daily_limit)
 async def campaign_limit(message: Message, state: FSMContext):
+    # Получаем лимит
     limit_text = message.text.strip()
     daily_limit = int(limit_text) if limit_text.isdigit() else 0
     if not limit_text.isdigit():
         await message.answer("⚠️ Некорректное число, установлен лимит 0 (без ограничений).")
+    
     data = await state.get_data()
     try:
+        # Создаём кампанию
         campaign = await create_campaign(
             name=data['name'],
             template_id=data['template_id'],
@@ -174,11 +181,13 @@ async def campaign_limit(message: Message, state: FSMContext):
             cycle_interval=data['cycle_interval'],
             daily_limit=daily_limit
         )
+        # Добавляем аккаунты
         for acc_id in data['campaign_accounts']:
             await add_account_to_campaign(campaign.id, acc_id)
-        # Используем ключ campaign_groups
+        # Добавляем группы (ключ campaign_groups)
         for grp_id in data['campaign_groups']:
             await add_group_to_campaign(campaign.id, grp_id)
+        
         await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
         await message.answer(
             f"✅ Рассылка «{campaign.name}» успешно создана!\n"
@@ -195,7 +204,7 @@ async def campaign_limit(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка при создании рассылки: {str(e)}")
         await state.clear()
 
-# === Просмотр рассылки (при нажатии на название) ===
+# === Просмотр деталей рассылки ===
 @router.callback_query(F.data.startswith("campaign_"))
 async def show_campaign(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[1])
@@ -214,6 +223,7 @@ async def show_campaign(callback: CallbackQuery):
             f"Интервал между сообщениями: {camp.message_interval} сек\n"
             f"Интервал между циклами: {camp.cycle_interval} сек\n"
             f"Отправлено: {camp.total_sent} (✅ {camp.total_success}, ❌ {camp.total_failed})")
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="▶️ Старт", callback_data=f"camp_start_{campaign_id}")],
         [InlineKeyboardButton(text="ℹ️ Информация о шаблоне", callback_data=f"camp_info_{campaign_id}")],
@@ -222,6 +232,7 @@ async def show_campaign(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=kb)
     await callback.answer()
 
+# === Информация о шаблоне ===
 @router.callback_query(F.data.startswith("camp_info_"))
 async def campaign_info(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
@@ -234,6 +245,7 @@ async def campaign_info(callback: CallbackQuery):
     await callback.message.answer(text)
     await callback.answer()
 
+# === Запуск рассылки ===
 @router.callback_query(F.data.startswith("camp_start_"))
 async def campaign_start(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
@@ -243,6 +255,7 @@ async def campaign_start(callback: CallbackQuery):
     await callback.answer("Рассылка запущена")
     await show_campaign(callback)
 
+# === Пауза ===
 @router.callback_query(F.data.startswith("camp_pause_"))
 async def campaign_pause(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
@@ -251,6 +264,7 @@ async def campaign_pause(callback: CallbackQuery):
     await callback.answer("Рассылка приостановлена")
     await show_campaign(callback)
 
+# === Остановка ===
 @router.callback_query(F.data.startswith("camp_stop_"))
 async def campaign_stop(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
@@ -259,6 +273,7 @@ async def campaign_stop(callback: CallbackQuery):
     await callback.answer("Рассылка остановлена")
     await show_campaign(callback)
 
+# === Статистика ===
 @router.callback_query(F.data.startswith("camp_stats_"))
 async def campaign_stats(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
@@ -274,6 +289,7 @@ async def campaign_stats(callback: CallbackQuery):
             f"Процент успеха: {round(camp.total_success/(camp.total_sent or 1)*100, 2)}%")
     await callback.message.edit_text(text, reply_markup=campaign_actions_kb(campaign_id, camp.status))
 
+# === Удаление ===
 @router.callback_query(F.data.startswith("camp_delete_"))
 async def confirm_delete_campaign(callback: CallbackQuery):
     campaign_id = int(callback.data.split("_")[2])
