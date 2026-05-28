@@ -27,3 +27,4 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 settings = Settings()
+print("REDIS_URL from settings:", settings.redis_url)
