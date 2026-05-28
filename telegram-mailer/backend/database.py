@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, selectinload
-from sqlalchemy import select, update, delete, func, and_, or_
+from sqlalchemy import case, select, update, delete, func, and_, or_
 from backend.models import Base, User, Account, Template, Group, Campaign, CampaignAccount, CampaignGroup, MailingLog, FloodWaitLog, AdminActionLog
 from backend.config import async def get_campaign_stats_by_group
 from typing import List, Optional, Dict, Any
