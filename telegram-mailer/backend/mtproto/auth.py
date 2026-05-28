@@ -5,35 +5,29 @@ from backend.utils.crypto import encrypt_value
 from backend.services.notification import notify_admin
 import os
 
-async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str = None, password: str = None, step: str = "init", phone_code_hash: str = None):
+async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str = None, password: str = None, step: str = "init"):
     session_path = f"sessions/{phone}.session"
-    client = TelegramClient(session_path, api_id, api_hash)
+    client = TelegramClient(session_path, api_id, api_hash, lang_code='ru', system_lang_code='ru-RU')
     await client.connect()
-    
-    # Пожалуйста, добавьте этот код сразу после подключения клиента (await client.connect())
-from telethon.tl.functions.account import UpdateDeviceRequest
 
-try:
-    await client(UpdateDeviceRequest(
-        device_model="Samsung SM-G998B",         # Модель смартфона
-        system_version="Android 13",             # Версия ОС
-        app_version="10.3.0 (123456)",           # Версия приложения
-        lang_code="ru",                          # Язык
-        system_lang_code="ru-RU"                 # Язык системы
-    ))
-except Exception as e:
-    print(f"Ошибка при обновлении информации об устройстве: {e}")
-        if step == "init":
-            # Запрашиваем код
-            result = await client.send_code_request(phone)
-            # result содержит phone_code_hash
-            return {
-                "step": "code",
-                "message": "Код отправлен",
-                "phone_code_hash": result.phone_code_hash
-            }
-        
-        elif step == "code":
+    # Отправляем информацию об устройстве
+    from telethon.tl.functions.account import UpdateDeviceRequest
+    try:
+        await client(UpdateDeviceRequest(
+            device_model="Samsung SM-G998B",
+            system_version="Android 13",
+            app_version="10.3.0 (123456)",
+            lang_code="ru",
+            system_lang_code="ru-RU"
+        ))
+    except Exception as e:
+        print(f"Device info error: {e}")
+
+    # Далее идёт существующий код (шаги init, code, password)
+    if step == "init":
+        await client.send_code_request(phone)
+        return {"step": "code", "message": "Код отправлен"}
+    elif step == "code":
             # Используем полученный phone_code_hash
             if not phone_code_hash:
                 return {"error": "Missing phone_code_hash"}
