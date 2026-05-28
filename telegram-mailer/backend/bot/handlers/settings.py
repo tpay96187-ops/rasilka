@@ -10,7 +10,6 @@ from backend.services.notification import notify_admin
 
 router = Router()
 
-# FSM для изменения настроек
 class SettingsStates(StatesGroup):
     waiting_new_max_accounts = State()
     waiting_new_message_interval = State()
@@ -18,7 +17,6 @@ class SettingsStates(StatesGroup):
 
 @router.callback_query(F.data == "menu_settings")
 async def settings_menu(callback: CallbackQuery):
-    """Показывает текущие настройки системы и кнопки для изменения (только для superadmin)"""
     role = await get_user_role(callback.from_user.id)
     if role != "superadmin":
         await callback.answer("⛔ Только Super Admin может изменять настройки", show_alert=True)
@@ -31,7 +29,7 @@ async def settings_menu(callback: CallbackQuery):
         f"🔄 Интервал между циклами (по умолчанию): `{settings.default_cycle_interval}` сек\n"
         f"👑 Super Admin ID: `{settings.superadmin_id}`\n"
         f"🔐 Шифрование: включено\n"
-        f"🗄️ База данных: SQLite/PostgreSQL\n\n"
+        f"🗄️ База данных: PostgreSQL\n\n"
         f"Для изменения параметров нажмите на соответствующую кнопку."
     )
     
@@ -43,7 +41,7 @@ async def settings_menu(callback: CallbackQuery):
         [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
     ])
     
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 @router.callback_query(F.data == "set_max_accounts")
@@ -61,13 +59,11 @@ async def process_max_accounts(message: Message, state: FSMContext):
     if new_value < 1 or new_value > 500:
         await message.answer("❌ Значение должно быть от 1 до 500.")
         return
-    # Обновляем в рантайме (это не сохранится в .env, только в памяти)
     settings.max_accounts = new_value
     await log_admin_action(message.from_user.id, "change_max_accounts", "system", new_value)
     await message.answer(f"✅ Максимум аккаунтов изменён на {new_value} (до перезапуска бота).\n"
                          f"⚠️ Для постоянного изменения пропишите в .env переменную MAX_ACCOUNTS и перезапустите.")
     await state.clear()
-    # Показываем меню настроек заново
     await settings_menu(message)
 
 @router.callback_query(F.data == "set_msg_interval")
@@ -114,13 +110,15 @@ async def process_cycle_interval(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "check_env")
 async def check_env(callback: CallbackQuery):
-    """Проверяет наличие обязательных переменных окружения"""
-    required_vars = ["BOT_TOKEN", "SUPERADMIN_ID", "ENCRYPTION_KEY"]
+    required_vars = ["BOT_TOKEN", "SUPERADMIN_ID", "ENCRYPTION_KEY", "DATABASE_URL", "REDIS_URL"]
     status = []
     for var in required_vars:
         val = getattr(settings, var.lower(), None)
         if val:
-            status.append(f"✅ {var} = {str(val)[:10]}...")
+            # Маскируем чувствительные данные
+            if var in ["BOT_TOKEN", "ENCRYPTION_KEY", "DATABASE_URL", "REDIS_URL"]:
+                val = str(val)[:10] + "..."
+            status.append(f"✅ {var} = {val}")
         else:
             status.append(f"❌ {var} не задан")
     text = "🔍 **Переменные окружения:**\n" + "\n".join(status)
