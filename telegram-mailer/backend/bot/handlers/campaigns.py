@@ -127,9 +127,9 @@ async def select_all_groups(callback: CallbackQuery, state: FSMContext):
         all_groups.extend(groups)
     all_groups = [g for g in all_groups if g.group_type != "channel"]
     selected_ids = [g.id for g in all_groups]
-    await state.update_data(selected_groups=selected_ids)
+    # Сохраняем сразу как campaign_groups
+    await state.update_data(campaign_groups=selected_ids, selected_groups=selected_ids)
     await callback.answer(f"✅ Выбрано {len(selected_ids)} групп")
-    # Переходим к вводу интервала
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
 
@@ -141,7 +141,7 @@ async def groups_done(callback: CallbackQuery, state: FSMContext):
     if not selected:
         await callback.answer("Выберите хотя бы одну группу", show_alert=True)
         return
-    # Сохраняем выбранные группы под ключом campaign_groups
+    # Сохраняем под ключом 'campaign_groups'
     await state.update_data(campaign_groups=selected)
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
@@ -165,41 +165,32 @@ async def campaign_cycle(message: Message, state: FSMContext):
 # === Финальное создание рассылки ===
 @router.message(CampaignStates.waiting_daily_limit)
 async def campaign_limit(message: Message, state: FSMContext):
-    # Получаем лимит
     limit_text = message.text.strip()
     daily_limit = int(limit_text) if limit_text.isdigit() else 0
-    if not limit_text.isdigit():
-        await message.answer("⚠️ Некорректное число, установлен лимит 0 (без ограничений).")
-    
     data = await state.get_data()
-    try:
-        # Создаём кампанию
-        campaign = await create_campaign(
-            name=data['name'],
-            template_id=data['template_id'],
-            message_interval=data['message_interval'],
-            cycle_interval=data['cycle_interval'],
-            daily_limit=daily_limit
-        )
-        # Добавляем аккаунты
-        for acc_id in data['campaign_accounts']:
-            await add_account_to_campaign(campaign.id, acc_id)
-        # Добавляем группы (ключ campaign_groups)
-        for grp_id in data['campaign_groups']:
-            await add_group_to_campaign(campaign.id, grp_id)
-        
-        await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
-        await message.answer(
-            f"✅ Рассылка «{campaign.name}» успешно создана!\n"
-            f"Аккаунтов: {len(data['campaign_accounts'])}\n"
-            f"Групп: {len(data['campaign_groups'])}\n"
-            f"Интервал между сообщениями: {campaign.message_interval} сек\n"
-            f"Интервал между циклами: {campaign.cycle_interval} сек\n"
-            f"Дневной лимит: {campaign.daily_limit if campaign.daily_limit > 0 else 'без лимита'}\n\n"
-            f"Перейдите в раздел «Рассылки» и нажмите «Старт» для запуска."
-        )
-        await state.clear()
-        await list_campaigns(message)
+    # Проверяем наличие всех ключей
+    required_keys = ['name', 'template_id', 'message_interval', 'cycle_interval', 'campaign_accounts', 'campaign_groups']
+    for key in required_keys:
+        if key not in data:
+            await message.answer(f"❌ Ошибка: не найден ключ {key}. Попробуйте создать рассылку заново.")
+            await state.clear()
+            return
+    # Создаём кампанию
+    campaign = await create_campaign(
+        name=data['name'],
+        template_id=data['template_id'],
+        message_interval=data['message_interval'],
+        cycle_interval=data['cycle_interval'],
+        daily_limit=daily_limit
+    )
+    for acc_id in data['campaign_accounts']:
+        await add_account_to_campaign(campaign.id, acc_id)
+    for grp_id in data['campaign_groups']:
+        await add_group_to_campaign(campaign.id, grp_id)
+    await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
+    await message.answer(f"✅ Рассылка «{campaign.name}» создана! Перейдите в раздел «Рассылки» для запуска.")
+    await state.clear()
+    await list_campaigns(message)
     except Exception as e:
         await message.answer(f"❌ Ошибка при создании рассылки: {str(e)}")
         await state.clear()
