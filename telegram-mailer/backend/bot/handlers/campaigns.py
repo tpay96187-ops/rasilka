@@ -134,13 +134,14 @@ async def select_all_groups(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
 
-@router.callback_query(F.data.startswith("group_done_campaign"))
+@router.callback_query(F.data.startswith("group_done_campaign"), CampaignStates.waiting_groups)
 async def groups_done(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data.get("selected_groups", [])
     if not selected:
         await callback.answer("Выберите хотя бы одну группу", show_alert=True)
         return
+    # Сохраняем выбранные группы под ключом campaign_groups
     await state.update_data(campaign_groups=selected)
     await callback.message.edit_text("Введите интервал между сообщениями (в секундах, по умолчанию 30):")
     await state.set_state(CampaignStates.waiting_message_interval)
@@ -168,26 +169,58 @@ async def campaign_cycle(message: Message, state: FSMContext):
 
 @router.message(CampaignStates.waiting_daily_limit)
 async def campaign_limit(message: Message, state: FSMContext):
-    try:
-        limit = int(message.text.strip())
-    except:
-        limit = 0
+    # Получаем лимит из сообщения (0 = без лимита)
+    limit_text = message.text.strip()
+    if limit_text.isdigit():
+        daily_limit = int(limit_text)
+    else:
+        daily_limit = 0
+        await message.answer("⚠️ Некорректное число, установлен лимит 0 (без ограничений).")
+    
+    # Получаем все данные из состояния
     data = await state.get_data()
-    campaign = await create_campaign(
-        name=data['name'],
-        template_id=data['template_id'],
-        message_interval=data['message_interval'],
-        cycle_interval=data['cycle_interval'],
-        daily_limit=limit
-    )
-    for acc_id in data['campaign_accounts']:
-        await add_account_to_campaign(campaign.id, acc_id)
-    for grp_id in data['campaign_groups']:
-        await add_group_to_campaign(campaign.id, grp_id)
-    await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
-    await message.answer(f"✅ Рассылка «{campaign.name}» создана. Используйте меню для запуска.")
-    await state.clear()
-    await list_campaigns(message)
+    
+    try:
+        # Создаём кампанию в БД
+        campaign = await create_campaign(
+            name=data['name'],
+            template_id=data['template_id'],
+            message_interval=data['message_interval'],
+            cycle_interval=data['cycle_interval'],
+            daily_limit=daily_limit
+        )
+        
+        # Добавляем выбранные аккаунты
+        for acc_id in data['campaign_accounts']:
+            await add_account_to_campaign(campaign.id, acc_id)
+        
+        # Добавляем выбранные группы (ключ 'campaign_groups')
+        for grp_id in data['campaign_groups']:
+            await add_group_to_campaign(campaign.id, grp_id)
+        
+        # Логируем действие
+        await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
+        
+        # Сообщаем об успехе
+        await message.answer(
+            f"✅ Рассылка «{campaign.name}» успешно создана!\n"
+            f"Аккаунтов: {len(data['campaign_accounts'])}\n"
+            f"Групп: {len(data['campaign_groups'])}\n"
+            f"Интервал между сообщениями: {campaign.message_interval} сек\n"
+            f"Интервал между циклами: {campaign.cycle_interval} сек\n"
+            f"Дневной лимит: {campaign.daily_limit if campaign.daily_limit > 0 else 'без лимита'}\n\n"
+            f"Перейдите в раздел «Рассылки» и нажмите «Старт» для запуска."
+        )
+        
+        # Очищаем состояние
+        await state.clear()
+        
+        # Показываем список рассылок
+        await list_campaigns(message)
+        
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при создании рассылки: {str(e)}")
+        await state.clear()
 
 # ========== ПРОСМОТР И УПРАВЛЕНИЕ РАССЫЛКОЙ ==========
 @router.callback_query(F.data.startswith("campaign_"))
