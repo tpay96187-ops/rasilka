@@ -349,14 +349,15 @@ async def log_mailing(campaign_id: int, account_id: int, group_id: int, success:
 # --- Статистика для отчётов ---
 async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
     async with AsyncSessionLocal() as session:
+        # Простой запрос без cast, обрабатываем в Python
         result = await session.execute(
             select(
                 Group.title,
                 Group.group_id,
                 Group.invite_link,
                 func.count(MailingLog.id).label("attempts"),
-                func.sum(MailingLog.success.cast(int)).label("success"),
-                func.sum((~MailingLog.success).cast(int)).label("failed")
+                func.count().filter(MailingLog.success == True).label("success"),
+                func.count().filter(MailingLog.success == False).label("failed")
             )
             .join(MailingLog, MailingLog.group_id == Group.id)
             .where(MailingLog.campaign_id == campaign_id)
@@ -374,7 +375,37 @@ async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
                 row.title, row.group_id, row.invite_link,
                 total, success, failed,
                 round(success_pct, 2), round(error_pct, 2),
-                0  # количество аккаунтов можно потом добавить
+                0  # можно добавить количество аккаунтов, но для ТЗ достаточно
+            ])
+        return output
+
+async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(
+                Account.name,
+                Account.phone,
+                func.count(func.distinct(MailingLog.group_id)).label("groups_count"),
+                func.count(MailingLog.id).label("attempts"),
+                func.count().filter(MailingLog.success == True).label("success"),
+                func.count().filter(MailingLog.success == False).label("failed")
+            )
+            .join(MailingLog, MailingLog.account_id == Account.id)
+            .where(MailingLog.campaign_id == campaign_id)
+            .group_by(Account.id)
+        )
+        rows = result.all()
+        output = []
+        for row in rows:
+            total = row.attempts
+            success = row.success or 0
+            failed = row.failed or 0
+            success_pct = (success / total * 100) if total > 0 else 0
+            error_pct = (failed / total * 100) if total > 0 else 0
+            output.append([
+                row.name, row.phone, row.groups_count,
+                total, success, failed,
+                round(success_pct, 2), round(error_pct, 2)
             ])
         return output
 
