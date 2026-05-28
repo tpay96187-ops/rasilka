@@ -12,6 +12,8 @@ router = Router()
 class TemplateStates(StatesGroup):
     waiting_name = State()
     waiting_content = State()
+    waiting_edit_name = State()      # добавлено
+    waiting_edit_content = State()   # добавлено
 
 @router.callback_query(F.data == "menu_templates")
 async def list_templates(callback: CallbackQuery):
@@ -66,7 +68,7 @@ async def edit_template_name(message: Message, state: FSMContext):
     data = await state.get_data()
     if message.text != "-":
         await update_template(data['edit_id'], name=message.text)
-    await message.answer("Введите новый текст сообщения (или '-'):")
+    await message.answer("Введите новый текст сообщения (или '-' чтобы оставить без изменений):")
     await state.set_state(TemplateStates.waiting_edit_content)
 
 @router.message(TemplateStates.waiting_edit_content)
