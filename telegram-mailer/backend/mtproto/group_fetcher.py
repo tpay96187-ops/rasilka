@@ -11,13 +11,23 @@ async def fetch_all_groups_for_account(account_id: int):
     await client.connect()
     groups = []
     async for dialog in client.iter_dialogs():
-        if dialog.is_group or dialog.is_channel:
+        # Только группы и супергруппы, исключаем каналы
+        if dialog.is_group or (dialog.is_channel and dialog.entity.megagroup):
+            participants_count = 0
+            try:
+                if dialog.is_group:
+                    participants_count = dialog.entity.participants_count if hasattr(dialog.entity, 'participants_count') else 0
+                elif dialog.is_channel and dialog.entity.megagroup:
+                    participants_count = dialog.entity.participants_count
+            except:
+                participants_count = 0
             group_data = {
                 "id": dialog.id,
                 "title": dialog.name,
                 "username": dialog.entity.username if hasattr(dialog.entity, 'username') else None,
-                "invite_link": None,  # можно получить отдельным методом
-                "type": "supergroup" if dialog.is_channel else "group"
+                "invite_link": None,
+                "type": "group" if not dialog.is_channel else "supergroup",
+                "participants_count": participants_count
             }
             await save_group(group_data, account_id)
             groups.append(group_data)
