@@ -57,13 +57,14 @@ class Template(Base):
 class Group(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True)
-    group_id = Column(BigInteger)   # Telegram chat_id
+    group_id = Column(BigInteger)
     title = Column(String(500))
     username = Column(String(255))
     invite_link = Column(String(500))
     group_type = Column(String(50))
     access_available = Column(Boolean, default=True)
     account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"))
+    participants_count = Column(Integer, default=0)   # <-- ДОБАВИТЬ ЭТУ СТРОКУ
     
     account = relationship("Account", back_populates="groups")
     campaign_groups = relationship("CampaignGroup", back_populates="group", cascade="all, delete-orphan")
