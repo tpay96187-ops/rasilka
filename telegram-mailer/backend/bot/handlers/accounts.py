@@ -16,7 +16,7 @@ from datetime import datetime
 
 router = Router()
 
-# === FSM для добавления аккаунта ===
+# === FSM состояния для добавления аккаунта ===
 class AddAccountStates(StatesGroup):
     waiting_api_id = State()
     waiting_api_hash = State()
@@ -49,7 +49,7 @@ async def show_account(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=account_actions_kb(account_id), parse_mode="Markdown")
     await callback.answer()
 
-# === Добавление аккаунта (команда /add_account) ===
+# === Команда /add_account ===
 @router.message(Command("add_account"))
 async def add_account_cmd(message: Message, state: FSMContext):
     await message.answer("🔑 Введите API ID (можно получить на my.telegram.org):")
@@ -73,6 +73,7 @@ async def add_account_api_hash(message: Message, state: FSMContext):
     await message.answer("📞 Введите номер телефона в международном формате (например, +79123456789):")
     await state.set_state(AddAccountStates.waiting_phone)
 
+# === Отправка запроса кода ===
 @router.message(AddAccountStates.waiting_phone)
 async def add_account_phone(message: Message, state: FSMContext):
     phone = message.text.strip()
@@ -81,7 +82,7 @@ async def add_account_phone(message: Message, state: FSMContext):
         return
     await state.update_data(phone=phone)
     data = await state.get_data()
-    # Отправляем запрос кода (шаг init)
+    # Шаг init: запрос кода
     result = await add_telegram_account(
         api_id=data['api_id'],
         api_hash=data['api_hash'],
@@ -93,10 +94,14 @@ async def add_account_phone(message: Message, state: FSMContext):
         await state.clear()
         return
     if result.get("step") == "code":
+        # Сохраняем phone_code_hash, полученный от Telegram
+        if result.get("phone_code_hash"):
+            await state.update_data(phone_code_hash=result['phone_code_hash'])
         await state.update_data(auth_step="code")
         await message.answer("📨 Введите код подтверждения, полученный в Telegram:")
         await state.set_state(AddAccountStates.waiting_code)
 
+# === Ввод кода подтверждения ===
 @router.message(AddAccountStates.waiting_code)
 async def add_account_code(message: Message, state: FSMContext):
     code = message.text.strip()
@@ -106,11 +111,12 @@ async def add_account_code(message: Message, state: FSMContext):
         api_hash=data['api_hash'],
         phone=data['phone'],
         code=code,
+        phone_code_hash=data.get('phone_code_hash'),
         step="code"
     )
     if result.get("error"):
         await message.answer(f"❌ Ошибка: {result['error']}")
-        # Если ошибка связана с 2FA, переходим к паролю
+        # Если требуется пароль 2FA
         if "пароль" in result['error'].lower() or "2FA" in result['error']:
             await state.set_state(AddAccountStates.waiting_password)
         else:
@@ -125,9 +131,11 @@ async def add_account_code(message: Message, state: FSMContext):
         await message.answer(f"✅ Аккаунт {result['account'].first_name} успешно добавлен!")
         await log_admin_action(message.from_user.id, "add_account", "account", result['account'].id)
         await state.clear()
-        # Показываем список аккаунтов
-        await list_accounts(message)
+        # Показать список аккаунтов
+        accounts = await get_accounts()
+        await message.answer("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
 
+# === Ввод 2FA пароля ===
 @router.message(AddAccountStates.waiting_password)
 async def add_account_password(message: Message, state: FSMContext):
     password = message.text.strip()
@@ -147,15 +155,14 @@ async def add_account_password(message: Message, state: FSMContext):
         await message.answer(f"✅ Аккаунт {result['account'].first_name} успешно добавлен!")
         await log_admin_action(message.from_user.id, "add_account", "account", result['account'].id)
         await state.clear()
-        await list_accounts(message)
+        accounts = await get_accounts()
+        await message.answer("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
 
 # === Проверка статуса аккаунта ===
 @router.callback_query(F.data.startswith("check_acc_"))
 async def check_account_status(callback: CallbackQuery):
-    account_id = int(callback.data.split("_")[2])
-    # Можно добавить логику проверки сессии через Telethon
     await callback.answer("🔄 Проверка выполняется...", show_alert=False)
-    # Здесь можно вызвать check_session_valid, если нужно
+    # Здесь можно добавить реальную проверку сессии, если нужно
     await callback.message.answer("✅ Аккаунт активен (проверка сессии).")
 
 # === Проверка через SpamBot ===
@@ -186,7 +193,6 @@ async def delete_account_final(callback: CallbackQuery):
     account_id = int(callback.data.split("_")[3])
     acc = await get_account(account_id)
     if acc:
-        # Удаляем сессию с диска
         import os
         if acc.session_file and os.path.exists(acc.session_file):
             os.remove(acc.session_file)
