@@ -78,7 +78,7 @@ async def select_account(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Аккаунт добавлен", show_alert=False)
     # Обновим сообщение, чтобы показать выбранные? Необязательно, просто подтверждение.
 
-@router.callback_query(F.data.startswith("account_done_campaign"))
+@router.callback_query(F.data.startswith("account_done_campaign"), CampaignStates.waiting_accounts)
 async def accounts_done(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data.get("selected_accounts", [])
@@ -86,17 +86,24 @@ async def accounts_done(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Выберите хотя бы один аккаунт", show_alert=True)
         return
     await state.update_data(campaign_accounts=selected)
+    
     # Собираем группы из выбранных аккаунтов
-    all_groups = []
+    groups = []
     for acc_id in selected:
         acc_groups = await get_groups(acc_id)
-        all_groups.extend(acc_groups)
-    if not all_groups:
+        groups.extend(acc_groups)
+    # Фильтруем каналы, оставляем только группы
+    groups = [g for g in groups if g.group_type != "channel"]
+    
+    if not groups:
         await callback.message.edit_text("Нет групп для выбранных аккаунтов. Загрузите группы через меню 'Группы'.")
         return
+    
     await state.update_data(selected_groups=[])
-    await callback.message.edit_text("Выберите группы для рассылки:", 
-                                     reply_markup=select_items_kb(groups, "group", "campaign", 0, per_page=5, show_select_all=True))
+    await callback.message.edit_text(
+        "Выберите группы для рассылки:",
+        reply_markup=select_items_kb(groups, "group", "campaign", 0, per_page=5, show_select_all=True)
+    )
     await state.set_state(CampaignStates.waiting_groups)
 
 # ========== ВЫБОР ГРУПП ==========
