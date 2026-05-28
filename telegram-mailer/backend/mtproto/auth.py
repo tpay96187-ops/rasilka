@@ -10,7 +10,19 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
     client = TelegramClient(session_path, api_id, api_hash)
     await client.connect()
     
-    try:
+    # Пожалуйста, добавьте этот код сразу после подключения клиента (await client.connect())
+from telethon.tl.functions.account import UpdateDeviceRequest
+
+try:
+    await client(UpdateDeviceRequest(
+        device_model="Samsung SM-G998B",         # Модель смартфона
+        system_version="Android 13",             # Версия ОС
+        app_version="10.3.0 (123456)",           # Версия приложения
+        lang_code="ru",                          # Язык
+        system_lang_code="ru-RU"                 # Язык системы
+    ))
+except Exception as e:
+    print(f"Ошибка при обновлении информации об устройстве: {e}")
         if step == "init":
             # Запрашиваем код
             result = await client.send_code_request(phone)
