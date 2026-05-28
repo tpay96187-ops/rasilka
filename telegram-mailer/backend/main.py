@@ -4,6 +4,8 @@ from backend.bot.dispatcher import dp
 from backend.bot.bot_instance import bot
 from backend.database import init_db
 from backend.config import settings
+import os
+print("REDIS_URL from environment:", os.getenv("REDIS_URL"))
 
 logging.basicConfig(level=settings.log_level)
 
