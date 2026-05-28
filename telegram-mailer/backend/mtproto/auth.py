@@ -8,16 +8,9 @@ from telethon.errors import (
 from backend.database import save_account
 from backend.utils.crypto import encrypt_value
 from backend.services.notification import notify_admin
-import asyncio
 
-async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str = None, password: str = None, step: str = "init"):
-    """
-    Пошаговая авторизация Telegram-аккаунта через MTProto.
-    step может быть: 'init', 'code', 'password'.
-    """
+async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str = None, password: str = None, phone_code_hash: str = None, step: str = "init"):
     session_path = f"sessions/{phone}.session"
-
-    # Создаём клиента с реалистичными параметрами устройства (имитируем Android)
     client = TelegramClient(
         session_path,
         api_id,
@@ -28,34 +21,34 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
         lang_code="ru",
         system_lang_code="ru-RU"
     )
-
     await client.connect()
 
-    # Проверка, что соединение установлено
     if not client.is_connected():
         return {"error": "Не удалось подключиться к Telegram"}
 
     try:
         if step == "init":
-            # Отправляем запрос кода
-            await client.send_code_request(phone)
-            return {"step": "code", "message": "Код подтверждения отправлен"}
+            # Отправляем запрос кода и получаем phone_code_hash
+            result = await client.send_code_request(phone)
+            return {
+                "step": "code",
+                "message": "Код отправлен",
+                "phone_code_hash": result.phone_code_hash
+            }
 
         elif step == "code":
-            # Пытаемся войти с полученным кодом
+            # Используем полученный phone_code_hash
             try:
-                await client.sign_in(phone, code)
+                await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
             except SessionPasswordNeededError:
-                # Требуется 2FA пароль
-                return {"step": "password", "message": "Требуется пароль двухфакторной аутентификации"}
+                return {"step": "password", "message": "Требуется пароль 2FA"}
             except PhoneCodeInvalidError:
                 return {"error": "Неверный код подтверждения"}
             except PhoneCodeExpiredError:
                 return {"error": "Код истёк, запросите новый"}
             except FloodWaitError as e:
-                return {"error": f"Слишком много попыток. Подождите {e.seconds} секунд."}
+                return {"error": f"Слишком много попыток. Подождите {e.seconds} сек."}
             else:
-                # Успешная авторизация
                 me = await client.get_me()
                 await save_account(
                     name=me.first_name or me.username or phone,
@@ -65,12 +58,11 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
                     session_file=session_path,
                     is_valid=True
                 )
-                await notify_admin(f"✅ Аккаунт {me.first_name} ({phone}) успешно добавлен")
+                await notify_admin(f"✅ Аккаунт {me.first_name} ({phone}) добавлен")
                 await client.disconnect()
                 return {"step": "done", "account": me}
 
         elif step == "password":
-            # Ввод 2FA пароля
             try:
                 await client.sign_in(password=password)
                 me = await client.get_me()
@@ -89,10 +81,10 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
                 return {"error": f"Ошибка при вводе пароля: {str(e)}"}
 
         else:
-            return {"error": "Неизвестный шаг авторизации"}
+            return {"error": "Неизвестный шаг"}
 
     except FloodWaitError as e:
-        return {"error": f"FloodWait: подождите {e.seconds} секунд"}
+        return {"error": f"FloodWait: подождите {e.seconds} сек."}
     except Exception as e:
         return {"error": f"Ошибка: {str(e)}"}
     finally:
