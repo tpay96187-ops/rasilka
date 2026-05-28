@@ -7,7 +7,7 @@ router = Router()
 @router.message(Command("help"))
 async def help_cmd(message: Message):
     text = (
-        "📚 *Список команд:*\n\n"
+        "📚 Список команд:\n\n"
         "/start – Главное меню\n"
         "/add_account – Добавить Telegram-аккаунт\n"
         "/new_template – Создать шаблон сообщения\n"
@@ -15,4 +15,4 @@ async def help_cmd(message: Message):
         "/help – Показать эту справку\n\n"
         "Также вы можете управлять системой через inline-кнопки в меню."
     )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text)
