@@ -32,7 +32,6 @@ async def show_groups(callback: CallbackQuery):
         ])
         await callback.message.edit_text("Группы не загружены. Обновить?", reply_markup=kb)
     else:
-        # Строим клавиатуру со списком групп (до 50)
         buttons = []
         for grp in groups[:50]:
             buttons.append([InlineKeyboardButton(text=f"👥 {grp.title}", callback_data=f"group_{grp.id}")])
