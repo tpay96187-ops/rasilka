@@ -1,21 +1,16 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, selectinload
 from sqlalchemy import select, update, delete, func, and_, or_
 from backend.models import Base, User, Account, Template, Group, Campaign, CampaignAccount, CampaignGroup, MailingLog, FloodWaitLog, AdminActionLog
 from backend.config import settings
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import asyncio
-import os
 
+# Приводим DATABASE_URL к виду, подходящему для asyncpg
 database_url = settings.database_url
-if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
+if database_url and database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    
-print("=== DIAGNOSTIC ===")
-print("DATABASE_URL from env:", os.getenv("DATABASE_URL"))
-database_url = settings.database_url
-print("After settings.database_url:", database_url.split('@')[0] + '@...')  # скрываем пароль
 
 engine = create_async_engine(database_url, echo=False, pool_size=10, max_overflow=20)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -23,14 +18,11 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Создаём суперадмина, если его нет
     await ensure_superadmin()
 
 async def ensure_superadmin():
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == settings.superadmin_id)
-        )
+        result = await session.execute(select(User).where(User.telegram_id == settings.superadmin_id))
         user = result.scalar_one_or_none()
         if not user:
             superadmin = User(
@@ -45,25 +37,19 @@ async def ensure_superadmin():
 # --- Роли и пользователи ---
 async def get_user_role(telegram_id: int) -> Optional[str]:
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == telegram_id, User.is_active == True)
-        )
+        result = await session.execute(select(User).where(User.telegram_id == telegram_id, User.is_active == True))
         user = result.scalar_one_or_none()
         return user.role if user else None
 
 async def is_user_active(telegram_id: int) -> bool:
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
+        result = await session.execute(select(User).where(User.telegram_id == telegram_id))
         user = result.scalar_one_or_none()
         return user.is_active if user else False
 
 async def get_all_admins() -> List[User]:
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(User).where(User.role.in_(["admin", "superadmin"]))
-        )
+        result = await session.execute(select(User).where(User.role.in_(["admin", "superadmin"])))
         return result.scalars().all()
 
 async def add_admin(telegram_id: int, username: str, role: str = "admin") -> bool:
@@ -118,18 +104,35 @@ async def get_account(account_id: int) -> Optional[Account]:
         result = await session.execute(select(Account).where(Account.id == account_id))
         return result.scalar_one_or_none()
 
+async def get_account_by_phone(phone: str) -> Optional[Account]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Account).where(Account.phone == phone))
+        return result.scalar_one_or_none()
+
 async def save_account(name: str, phone: str, api_id: int, api_hash: str, session_file: str, is_valid: bool) -> Account:
     async with AsyncSessionLocal() as session:
-        acc = Account(
-            name=name,
-            phone=phone,
-            api_id=api_id,
-            api_hash=api_hash,
-            session_file=session_file,
-            is_valid=is_valid,
-            last_activity=datetime.utcnow()
-        )
-        session.add(acc)
+        # Проверяем, существует ли уже
+        existing = await session.execute(select(Account).where(Account.phone == phone))
+        acc = existing.scalar_one_or_none()
+        if acc:
+            # Обновляем существующий
+            acc.name = name
+            acc.api_id = api_id
+            acc.api_hash = api_hash
+            acc.session_file = session_file
+            acc.is_valid = is_valid
+            acc.last_activity = datetime.utcnow()
+        else:
+            acc = Account(
+                name=name,
+                phone=phone,
+                api_id=api_id,
+                api_hash=api_hash,
+                session_file=session_file,
+                is_valid=is_valid,
+                last_activity=datetime.utcnow()
+            )
+            session.add(acc)
         await session.commit()
         await session.refresh(acc)
         return acc
@@ -167,7 +170,6 @@ async def set_spam_block(account_id: int, blocked: bool):
 
 async def increment_daily_sent(account_id: int):
     async with AsyncSessionLocal() as session:
-        # Сброс счётчика, если прошли сутки
         acc = await session.get(Account, account_id)
         if acc.last_reset_date.date() < datetime.utcnow().date():
             acc.daily_sent = 0
@@ -225,15 +227,29 @@ async def get_groups(account_id: int = None) -> List[Group]:
 
 async def save_group(group_data: dict, account_id: int) -> Group:
     async with AsyncSessionLocal() as session:
-        group = Group(
-            group_id=group_data["id"],
-            title=group_data.get("title", "Unknown"),
-            username=group_data.get("username"),
-            invite_link=group_data.get("invite_link"),
-            group_type=group_data.get("type", "group"),
-            account_id=account_id
+        # Проверяем, нет ли уже такой группы
+        existing = await session.execute(
+            select(Group).where(Group.group_id == group_data["id"], Group.account_id == account_id)
         )
-        session.add(group)
+        group = existing.scalar_one_or_none()
+        if group:
+            # Обновляем
+            group.title = group_data.get("title", "Unknown")
+            group.username = group_data.get("username")
+            group.invite_link = group_data.get("invite_link")
+            group.group_type = group_data.get("type", "group")
+            group.participants_count = group_data.get("participants_count", 0)
+        else:
+            group = Group(
+                group_id=group_data["id"],
+                title=group_data.get("title", "Unknown"),
+                username=group_data.get("username"),
+                invite_link=group_data.get("invite_link"),
+                group_type=group_data.get("type", "group"),
+                account_id=account_id,
+                participants_count=group_data.get("participants_count", 0)
+            )
+            session.add(group)
         await session.commit()
         await session.refresh(group)
         return group
@@ -254,9 +270,7 @@ async def get_campaigns(status: str = None) -> List[Campaign]:
 
 async def get_campaign(campaign_id: int) -> Optional[Campaign]:
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(Campaign).where(Campaign.id == campaign_id)
-        )
+        result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
         return result.scalar_one_or_none()
 
 async def create_campaign(name: str, template_id: int, message_interval: int, cycle_interval: int, daily_limit: int) -> Campaign:
@@ -362,8 +376,7 @@ async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
                 row.title, row.group_id, row.invite_link,
                 total, success, failed,
                 round(success_pct, 2), round(error_pct, 2),
-                # количество аккаунтов, задействованных в группе
-                0  # можно доработать, но для ТЗ достаточно
+                0  # количество аккаунтов можно потом добавить
             ])
         return output
 
@@ -397,33 +410,16 @@ async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
             ])
         return output
 
-# ----- Очистка логов и сброс лимитов (для Celery beat) -----
+# --- Очистка логов и сброс лимитов ---
 async def clear_old_logs(days: int = 30):
-    """Удаляет логи старше указанного количества дней"""
-    from datetime import datetime, timedelta
-    from sqlalchemy import delete
     cutoff = datetime.utcnow() - timedelta(days=days)
     async with AsyncSessionLocal() as session:
-        # Удаляем старые логи отправки
-        await session.execute(
-            delete(MailingLog).where(MailingLog.sent_at < cutoff)
-        )
-        # Удаляем старые логи floodwait
-        await session.execute(
-            delete(FloodWaitLog).where(FloodWaitLog.occurred_at < cutoff)
-        )
-        # Удаляем старые логи действий админов
-        await session.execute(
-            delete(AdminActionLog).where(AdminActionLog.timestamp < cutoff)
-        )
+        await session.execute(delete(MailingLog).where(MailingLog.sent_at < cutoff))
+        await session.execute(delete(FloodWaitLog).where(FloodWaitLog.occurred_at < cutoff))
+        await session.execute(delete(AdminActionLog).where(AdminActionLog.timestamp < cutoff))
         await session.commit()
 
 async def reset_daily_limits():
-    """Сбрасывает daily_sent для всех аккаунтов"""
-    from datetime import datetime
-    from sqlalchemy import update
     async with AsyncSessionLocal() as session:
-        await session.execute(
-            update(Account).values(daily_sent=0, last_reset_date=datetime.utcnow())
-        )
+        await session.execute(update(Account).values(daily_sent=0, last_reset_date=datetime.utcnow()))
         await session.commit()
