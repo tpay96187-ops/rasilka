@@ -1,5 +1,6 @@
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, PhoneCodeExpiredError
+from telethon.tl.functions.account import UpdateDeviceRequest
 from backend.database import save_account
 from backend.utils.crypto import encrypt_value
 from backend.services.notification import notify_admin
@@ -10,8 +11,7 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
     client = TelegramClient(session_path, api_id, api_hash, lang_code='ru', system_lang_code='ru-RU')
     await client.connect()
 
-    # Отправляем информацию об устройстве
-    from telethon.tl.functions.account import UpdateDeviceRequest
+    # Отправляем информацию об устройстве (имитируем реальное приложение)
     try:
         await client(UpdateDeviceRequest(
             device_model="Samsung SM-G998B",
@@ -21,47 +21,52 @@ async def add_telegram_account(api_id: int, api_hash: str, phone: str, code: str
             system_lang_code="ru-RU"
         ))
     except Exception as e:
-        print(f"Device info error: {e}")
+        print(f"Device info update error: {e}")
 
-    # Далее идёт существующий код (шаги init, code, password)
     if step == "init":
         await client.send_code_request(phone)
         return {"step": "code", "message": "Код отправлен"}
+
     elif step == "code":
-            # Используем полученный phone_code_hash
-            if not phone_code_hash:
-                return {"error": "Missing phone_code_hash"}
-            try:
-                await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-            except SessionPasswordNeededError:
-                return {"step": "password", "message": "Требуется пароль 2FA"}
-            except PhoneCodeInvalidError:
-                return {"error": "Неверный код"}
-            except PhoneCodeExpiredError:
-                return {"error": "Код истёк, запросите новый"}
-            else:
-                me = await client.get_me()
-                await save_account(
-                    name=me.first_name or me.username or phone,
-                    phone=phone,
-                    api_id=api_id,
-                    api_hash=encrypt_value(api_hash),
-                    session_file=session_path,
-                    is_valid=True
-                )
-                await notify_admin(f"✅ Аккаунт {me.first_name} ({phone}) добавлен")
-                await client.disconnect()
-                return {"step": "done", "account": me}
-        
-        elif step == "password":
-            await client.sign_in(password=password)
+        try:
+            await client.sign_in(phone, code)
+        except SessionPasswordNeededError:
+            return {"step": "password", "message": "Требуется пароль 2FA"}
+        except PhoneCodeInvalidError:
+            return {"error": "Неверный код"}
+        except PhoneCodeExpiredError:
+            return {"error": "Код истёк, запросите новый"}
+        else:
             me = await client.get_me()
-            await save_account(...)
+            await save_account(
+                name=me.first_name or me.username or phone,
+                phone=phone,
+                api_id=api_id,
+                api_hash=encrypt_value(api_hash),
+                session_file=session_path,
+                is_valid=True
+            )
+            await notify_admin(f"✅ Аккаунт {me.first_name} ({phone}) добавлен")
             await client.disconnect()
             return {"step": "done", "account": me}
-    
-    except Exception as e:
-        return {"error": str(e)}
-    finally:
-        if client.is_connected():
+
+    elif step == "password":
+        try:
+            await client.sign_in(password=password)
+            me = await client.get_me()
+            await save_account(
+                name=me.first_name or me.username or phone,
+                phone=phone,
+                api_id=api_id,
+                api_hash=encrypt_value(api_hash),
+                session_file=session_path,
+                is_valid=True
+            )
+            await notify_admin(f"✅ Аккаунт {me.first_name} ({phone}) добавлен (2FA)")
             await client.disconnect()
+            return {"step": "done", "account": me}
+        except Exception as e:
+            return {"error": str(e)}
+
+    else:
+        return {"error": "Неизвестный шаг"}
