@@ -3,7 +3,7 @@ from backend.database import get_account, set_flood_wait, log_mailing, increment
 from backend.utils.crypto import decrypt_value
 from datetime import datetime
 
-async def send_message_to_group(account_id: int, group_entity, message_text: str, campaign_id: int):
+async def send_message_to_group(account_id: int, group_entity, message_text: str, campaign_id: int, db_group_id: int):
     acc = await get_account(account_id)
     if not acc or not acc.is_valid:
         return {"success": False, "error": "invalid_account"}
@@ -29,7 +29,7 @@ async def send_message_to_group(account_id: int, group_entity, message_text: str
     
     except errors.FloodWaitError as e:
         await set_flood_wait(account_id, e.seconds)
-        await log_mailing(campaign_id, account_id, group_entity.id, success=False, error_type="floodwait", error_detail=str(e))
+        await log_mailing(campaign_id, account_id, db_group_id, group_entity.id, success=success, error_type="floodwait", error_detail=str(e))
         return {"success": False, "error": "floodwait", "wait_seconds": e.seconds}
     
     except errors.PeerFloodError:
