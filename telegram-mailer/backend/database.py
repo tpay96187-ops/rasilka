@@ -227,18 +227,16 @@ async def get_groups(account_id: int = None) -> List[Group]:
 
 async def save_group(group_data: dict, account_id: int) -> Group:
     async with AsyncSessionLocal() as session:
-        # Проверяем, нет ли уже такой группы
         existing = await session.execute(
             select(Group).where(Group.group_id == group_data["id"], Group.account_id == account_id)
         )
         group = existing.scalar_one_or_none()
         if group:
-            # Обновляем
             group.title = group_data.get("title", "Unknown")
             group.username = group_data.get("username")
             group.invite_link = group_data.get("invite_link")
             group.group_type = group_data.get("type", "group")
-            group.participants_count = group_data.get("participants_count", 0)
+            group.participants_count = group_data.get("participants_count", 0)   # ДОБАВИТЬ
         else:
             group = Group(
                 group_id=group_data["id"],
@@ -247,7 +245,7 @@ async def save_group(group_data: dict, account_id: int) -> Group:
                 invite_link=group_data.get("invite_link"),
                 group_type=group_data.get("type", "group"),
                 account_id=account_id,
-                participants_count=group_data.get("participants_count", 0)
+                participants_count=group_data.get("participants_count", 0)   # ДОБАВИТЬ
             )
             session.add(group)
         await session.commit()
