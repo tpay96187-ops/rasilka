@@ -168,29 +168,31 @@ async def campaign_limit(message: Message, state: FSMContext):
     limit_text = message.text.strip()
     daily_limit = int(limit_text) if limit_text.isdigit() else 0
     data = await state.get_data()
-    # Проверяем наличие всех ключей
+    
+    # Проверка наличия ключей
     required_keys = ['name', 'template_id', 'message_interval', 'cycle_interval', 'campaign_accounts', 'campaign_groups']
     for key in required_keys:
         if key not in data:
             await message.answer(f"❌ Ошибка: не найден ключ {key}. Попробуйте создать рассылку заново.")
             await state.clear()
             return
-    # Создаём кампанию
-    campaign = await create_campaign(
-        name=data['name'],
-        template_id=data['template_id'],
-        message_interval=data['message_interval'],
-        cycle_interval=data['cycle_interval'],
-        daily_limit=daily_limit
-    )
-    for acc_id in data['campaign_accounts']:
-        await add_account_to_campaign(campaign.id, acc_id)
-    for grp_id in data['campaign_groups']:
-        await add_group_to_campaign(campaign.id, grp_id)
-    await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
-    await message.answer(f"✅ Рассылка «{campaign.name}» создана! Перейдите в раздел «Рассылки» для запуска.")
-    await state.clear()
-    await list_campaigns(message)
+    
+    try:
+        campaign = await create_campaign(
+            name=data['name'],
+            template_id=data['template_id'],
+            message_interval=data['message_interval'],
+            cycle_interval=data['cycle_interval'],
+            daily_limit=daily_limit
+        )
+        for acc_id in data['campaign_accounts']:
+            await add_account_to_campaign(campaign.id, acc_id)
+        for grp_id in data['campaign_groups']:
+            await add_group_to_campaign(campaign.id, grp_id)
+        await log_admin_action(message.from_user.id, "create_campaign", "campaign", campaign.id)
+        await message.answer(f"✅ Рассылка «{campaign.name}» создана! Перейдите в раздел «Рассылки» для запуска.")
+        await state.clear()
+        await list_campaigns(message)
     except Exception as e:
         await message.answer(f"❌ Ошибка при создании рассылки: {str(e)}")
         await state.clear()
