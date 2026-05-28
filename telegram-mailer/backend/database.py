@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, selectinload
-from sqlalchemy import text, case, select, update, delete, func, and_, or_
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, update, delete, func, and_, or_, case
+from backend.config import settings
 from backend.models import Base, User, Account, Template, Group, Campaign, CampaignAccount, CampaignGroup, MailingLog, FloodWaitLog, AdminActionLog
-from backend.config import async def get_campaign_stats_by_group
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import asyncio
 
@@ -348,60 +349,37 @@ async def log_mailing(campaign_id: int, account_id: int, group_id: int, success:
 # --- Статистика для отчётов ---
 async def get_campaign_stats_by_group(campaign_id: int) -> List[dict]:
     async with AsyncSessionLocal() as session:
-        query = text("""
-            SELECT g.title, g.group_id, g.invite_link,
-                   COUNT(ml.id) AS attempts,
-                   SUM(CASE WHEN ml.success THEN 1 ELSE 0 END) AS success,
-                   SUM(CASE WHEN NOT ml.success THEN 1 ELSE 0 END) AS failed
-            FROM mailing_logs ml
-            JOIN groups g ON g.id = ml.group_id
-            WHERE ml.campaign_id = :campaign_id
-            GROUP BY g.id
-        """)
-        result = await session.execute(query, {"campaign_id": campaign_id})
-        rows = result.fetchall()
+        result = await session.execute(
+            select(
+                Group.title,
+                Group.group_id,
+                Group.invite_link,
+                func.count(MailingLog.id).label("attempts"),
+                func.sum(case((MailingLog.success == True, 1), else_=0)).label("success"),
+                func.sum(case((MailingLog.success == False, 1), else_=0)).label("failed")
+            )
+            .join(MailingLog, MailingLog.group_id == Group.id)
+            .where(MailingLog.campaign_id == campaign_id)
+            .group_by(Group.id)
+        )
+        rows = result.all()
         output = []
         for row in rows:
-            attempts = row[3] or 0
-            success = row[4] or 0
-            failed = row[5] or 0
+            attempts = int(row.attempts) if row.attempts is not None else 0
+            success = int(row.success) if row.success is not None else 0
+            failed = int(row.failed) if row.failed is not None else 0
             success_pct = (success / attempts * 100) if attempts > 0 else 0
             error_pct = (failed / attempts * 100) if attempts > 0 else 0
             output.append([
-                row[0] or "", row[1] or 0, row[2] or "",
-                attempts, success, failed,
-                round(success_pct, 2), round(error_pct, 2),
+                str(row.title) if row.title else "",
+                int(row.group_id) if row.group_id else 0,
+                str(row.invite_link) if row.invite_link else "",
+                attempts,
+                success,
+                failed,
+                round(success_pct, 2),
+                round(error_pct, 2),
                 0
-            ])
-        return output
-
-async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
-    async with AsyncSessionLocal() as session:
-        query = text("""
-            SELECT a.name, a.phone,
-                   COUNT(DISTINCT ml.group_id) AS groups_count,
-                   COUNT(ml.id) AS attempts,
-                   SUM(CASE WHEN ml.success THEN 1 ELSE 0 END) AS success,
-                   SUM(CASE WHEN NOT ml.success THEN 1 ELSE 0 END) AS failed
-            FROM mailing_logs ml
-            JOIN accounts a ON a.id = ml.account_id
-            WHERE ml.campaign_id = :campaign_id
-            GROUP BY a.id
-        """)
-        result = await session.execute(query, {"campaign_id": campaign_id})
-        rows = result.fetchall()
-        output = []
-        for row in rows:
-            attempts = row[3] or 0
-            success = row[4] or 0
-            failed = row[5] or 0
-            groups_count = row[2] or 0
-            success_pct = (success / attempts * 100) if attempts > 0 else 0
-            error_pct = (failed / attempts * 100) if attempts > 0 else 0
-            output.append([
-                row[0] or "", row[1] or "",
-                groups_count, attempts, success, failed,
-                round(success_pct, 2), round(error_pct, 2)
             ])
         return output
 
@@ -440,6 +418,7 @@ async def get_campaign_stats_by_account(campaign_id: int) -> List[dict]:
                 round(error_pct, 2)
             ])
         return output
+        
 # --- Очистка логов и сброс лимитов ---
 async def clear_old_logs(days: int = 30):
     cutoff = datetime.utcnow() - timedelta(days=days)
