@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from backend.bot.states import CampaignStates
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from backend.bot.keyboards import campaigns_list_kb, campaign_actions_kb, select_items_kb, confirm_kb, back_to_main_kb
 from backend.database import (
     get_campaigns, get_campaign, create_campaign, update_campaign, delete_campaign,
