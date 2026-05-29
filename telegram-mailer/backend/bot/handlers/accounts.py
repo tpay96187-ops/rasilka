@@ -43,7 +43,12 @@ async def add_account_start_callback(callback: CallbackQuery, state: FSMContext)
 
 @router.callback_query(F.data.startswith("acc_"))
 async def show_account(callback: CallbackQuery):
-    account_id = int(callback.data.split("_")[1])
+    parts = callback.data.split("_")
+    if len(parts) < 2 or not parts[1].isdigit():
+        # Это не числовой ID (например, acc_sel), просто игнорируем
+        await callback.answer()
+        return
+    account_id = int(parts[1])
     acc = await get_account(account_id)
     if not acc:
         await callback.answer("Аккаунт не найден")
