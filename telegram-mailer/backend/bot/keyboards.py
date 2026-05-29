@@ -92,6 +92,21 @@ def confirm_kb(action: str, target_id: int) -> InlineKeyboardMarkup:
     ])
 
 # Устаревшая функция select_items_kb больше не используется, можно удалить или оставить для совместимости
-def select_items_kb(items: List, item_type: str, action: str, page: int = 0, per_page: int = 5, show_select_all: bool = False) -> InlineKeyboardMarkup:
-    # Оставлена для совместимости, но не используется в новом flow
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]])
+def select_items_kb(items: List, item_type: str, action: str, page: int = 0, per_page: int = 5) -> InlineKeyboardMarkup:
+    start = page * per_page
+    end = start + per_page
+    page_items = items[start:end]
+    buttons = []
+    for item in page_items:
+        name = getattr(item, "name", None) or getattr(item, "title", "Unknown")
+        buttons.append([InlineKeyboardButton(text=f"☑️ {name}", callback_data=f"{item_type}_select_{action}_{item.id}")])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"{item_type}_page_{action}_{page-1}"))
+    if end < len(items):
+        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"{item_type}_page_{action}_{page+1}"))
+    if nav:
+        buttons.append(nav)
+    buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data=f"{item_type}_done_{action}")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"cancel_{action}")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
