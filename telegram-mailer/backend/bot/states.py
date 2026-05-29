@@ -1,24 +1,11 @@
 from aiogram.fsm.state import State, StatesGroup
 
-class AddAccountStates(StatesGroup):
-    waiting_api_id = State()
-    waiting_api_hash = State()
-    waiting_phone = State()
-    waiting_code = State()
-    waiting_password = State()
-
-class TemplateStates(StatesGroup):
-    waiting_name = State()
-    waiting_content = State()
-    waiting_edit_name = State()
-    waiting_edit_content = State()
-
 class CampaignStates(StatesGroup):
-    waiting_name = State()
-    waiting_template = State()
-    waiting_accounts = State()
-    waiting_groups_selection_method = State()   # выбор метода выбора групп (все / вручную)
-    waiting_manual_groups_ids = State()          # ожидание ввода ID групп вручную
-    waiting_message_interval = State()
-    waiting_cycle_interval = State()
-    waiting_daily_limit = State()
+    waiting_name = State()                      # Название рассылки
+    waiting_template = State()                  # Выбор шаблона
+    waiting_accounts = State()                  # Выбор аккаунтов
+    waiting_groups_selection_method = State()   # Метод выбора групп (все или отдельно)
+    waiting_groups_manual_input = State()       # Ручной ввод ID групп
+    waiting_message_interval = State()          # Интервал между сообщениями
+    waiting_cycle_interval = State()            # Интервал между циклами
+    waiting_daily_limit = State()               # Дневной лимит
