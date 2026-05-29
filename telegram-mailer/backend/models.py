@@ -37,6 +37,7 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     daily_sent = Column(Integer, default=0)
     last_reset_date = Column(DateTime, default=datetime.utcnow)
+    daily_limit = Column(Integer, default=0)
 
     groups = relationship("Group", back_populates="account", cascade="all, delete-orphan")
     campaign_accounts = relationship("CampaignAccount", back_populates="account", cascade="all, delete-orphan")
