@@ -86,7 +86,7 @@ async def select_account(callback: CallbackQuery, state: FSMContext):
     # но для наглядности можно показать сообщение с выбранными
     await callback.message.answer(f"Выбрано аккаунтов: {len(selected)}. Продолжайте выбор или нажмите «Готово».")
 
-@router.callback_query(F.data == "acc_selection_done", CampaignStates.waiting_accounts)
+@router.callback_query(F.data.startswith("account_done_campaign"), CampaignStates.waiting_accounts)
 async def accounts_done(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data.get("selected_accounts", [])
