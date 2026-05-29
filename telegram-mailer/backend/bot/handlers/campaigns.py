@@ -272,3 +272,9 @@ async def delete_campaign_final(callback: CallbackQuery):
     await log_admin_action(callback.from_user.id, "delete_campaign", "campaign", campaign_id)
     await callback.message.edit_text("✅ Рассылка удалена")
     await list_campaigns(callback)
+
+@router.callback_query(F.data == "cancel_campaign_creation")
+async def cancel_campaign_creation(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("Создание рассылки отменено.", reply_markup=back_to_main_kb())
+    await callback.answer()
