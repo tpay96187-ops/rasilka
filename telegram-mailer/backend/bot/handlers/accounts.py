@@ -34,18 +34,12 @@ async def list_accounts(callback: CallbackQuery):
         await callback.message.edit_text("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
     await callback.answer()
 
-# === Обработчик inline-кнопки "Добавить аккаунт" ===
-@router.callback_query(F.data == "add_account_start")
-async def add_account_start_callback(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer("🔑 Введите API ID (можно получить на my.telegram.org):")
-    await state.set_state(AddAccountStates.waiting_api_id)
-    await callback.answer()
-
+# === Просмотр конкретного аккаунта ===
 @router.callback_query(F.data.startswith("acc_"))
 async def show_account(callback: CallbackQuery):
     parts = callback.data.split("_")
     if len(parts) < 2 or not parts[1].isdigit():
-        # Это не числовой ID (например, acc_sel), просто игнорируем
+        # Если это не числовой ID (например, acc_sel), игнорируем
         await callback.answer()
         return
     account_id = int(parts[1])
@@ -60,7 +54,14 @@ async def show_account(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=account_actions_kb(account_id), parse_mode="Markdown")
     await callback.answer()
 
-# === Команда /add_account (альтернативный способ) ===
+# === Обработчик инлайн-кнопки "Добавить аккаунт" ===
+@router.callback_query(F.data == "add_account_start")
+async def add_account_start_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("🔑 Введите API ID (можно получить на my.telegram.org):")
+    await state.set_state(AddAccountStates.waiting_api_id)
+    await callback.answer()
+
+# === Команда /add_account ===
 @router.message(Command("add_account"))
 async def add_account_cmd(message: Message, state: FSMContext):
     await message.answer("🔑 Введите API ID (можно получить на my.telegram.org):")
@@ -90,7 +91,6 @@ async def add_account_phone(message: Message, state: FSMContext):
     if not validate_phone(phone):
         await message.answer("❌ Неверный формат номера. Пример: +79123456789")
         return
-    # Проверка на существующий аккаунт
     existing = await get_account_by_phone(phone)
     if existing:
         await message.answer("❌ Аккаунт с таким номером уже добавлен. Удалите его перед повторным добавлением.")
@@ -143,13 +143,7 @@ async def add_account_code(message: Message, state: FSMContext):
         await message.answer(f"✅ Аккаунт {result['account'].first_name} успешно добавлен!")
         await log_admin_action(message.from_user.id, "add_account", "account", result['account'].id)
         await state.clear()
-        # Обновляем список аккаунтов
-        accounts = await get_accounts()
-        if not accounts:
-            text = "📱 Аккаунты отсутствуют.\n➕ Нажмите кнопку ниже, чтобы добавить."
-            await message.answer(text, reply_markup=account_list_kb(accounts))
-        else:
-            await message.answer("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
+        await list_accounts(message)
 
 @router.message(AddAccountStates.waiting_password)
 async def add_account_password(message: Message, state: FSMContext):
@@ -170,9 +164,7 @@ async def add_account_password(message: Message, state: FSMContext):
         await message.answer(f"✅ Аккаунт {result['account'].first_name} успешно добавлен!")
         await log_admin_action(message.from_user.id, "add_account", "account", result['account'].id)
         await state.clear()
-        # Обновляем список
-        accounts = await get_accounts()
-        await message.answer("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
+        await list_accounts(message)
 
 # === Проверка статуса аккаунта ===
 @router.callback_query(F.data.startswith("check_acc_"))
@@ -215,10 +207,4 @@ async def delete_account_final(callback: CallbackQuery):
         await log_admin_action(callback.from_user.id, "delete_account", "account", account_id)
         await notify_admin(f"🗑 Аккаунт {acc.phone} удалён.")
     await callback.message.edit_text("✅ Аккаунт удалён.")
-    # Показать обновлённый список
-    accounts = await get_accounts()
-    if not accounts:
-        text = "📱 Аккаунты отсутствуют.\n➕ Нажмите кнопку ниже, чтобы добавить."
-        await callback.message.answer(text, reply_markup=account_list_kb(accounts))
-    else:
-        await callback.message.answer("📱 Список аккаунтов:", reply_markup=account_list_kb(accounts))
+    await list_accounts(callback)
