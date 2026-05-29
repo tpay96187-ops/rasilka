@@ -71,6 +71,8 @@ def campaign_actions_kb(campaign_id: int, status: str) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="⏸️ Пауза", callback_data=f"camp_pause_{campaign_id}")])
     if status == "running" or status == "paused":
         buttons.append([InlineKeyboardButton(text="⏹️ Остановить", callback_data=f"camp_stop_{campaign_id}")])
+        if status == "paused":
+    buttons.append([InlineKeyboardButton(text="▶️ Возобновить", callback_data=f"camp_start_{campaign_id}")])
     buttons.append([InlineKeyboardButton(text="📈 Статистика", callback_data=f"camp_stats_{campaign_id}")])
     buttons.append([InlineKeyboardButton(text="📊 Excel-отчёт", callback_data=f"camp_report_{campaign_id}")])
     buttons.append([InlineKeyboardButton(text="🗑 Удалить", callback_data=f"camp_delete_{campaign_id}")])
