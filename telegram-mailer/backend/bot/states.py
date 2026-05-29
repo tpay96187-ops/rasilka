@@ -17,7 +17,8 @@ class CampaignStates(StatesGroup):
     waiting_name = State()
     waiting_template = State()
     waiting_accounts = State()
-    waiting_groups = State()
+    waiting_groups_selection_method = State()   # выбор метода выбора групп (все / вручную)
+    waiting_manual_groups_ids = State()          # ожидание ввода ID групп вручную
     waiting_message_interval = State()
     waiting_cycle_interval = State()
     waiting_daily_limit = State()
