@@ -57,10 +57,17 @@ async def campaign_template(callback: CallbackQuery, state: FSMContext):
     template_id = int(callback.data.split("_")[2])
     await state.update_data(template_id=template_id)
     accounts = await get_accounts()
+    # Фильтруем только валидные аккаунты (без спам-блока, не в флуде)
     valid_accounts = [a for a in accounts if a.is_valid and not a.spam_blocked and (not a.flood_wait_until or a.flood_wait_until < datetime.utcnow())]
+    
+    # Диагностика: если нет аккаунтов, сообщим
     if not valid_accounts:
         await callback.answer("Нет доступных аккаунтов", show_alert=True)
+        # Можно вывести причину
+        reason = "Нет ни одного аккаунта. " if not accounts else "Все аккаунты невалидны, заблокированы или в FloodWait."
+        await callback.message.edit_text(f"❌ {reason} Добавьте аккаунт через раздел 'Аккаунты'.")
         return
+    
     await state.update_data(selected_accounts=[])
     await callback.message.edit_text("Выберите аккаунты для рассылки (можно несколько):", 
                                      reply_markup=select_items_kb(valid_accounts, "account", "campaign", 0))
